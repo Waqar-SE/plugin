@@ -1,0 +1,5 @@
+{
+  "name": "flow",
+  "version": "0.1.0",
+  "description": "Skills Flow runs in its sessions: flow-dev (work item to branch), pr-review (PR to review) and flow-deps (Dependabot alerts to fix branch)."
+}
