@@ -28,4 +28,6 @@ You reproduce one bug. `.flow/work/context.md` describes the bug. Work only in t
 
 Leave the failed test in the code. The fix will make it pass. Do not fix the bug.
 
+**Style guides.** The caller gives you the style guide of each area that the change touches (backend: Django in `src/`, frontend: React in `src/frontend`), and can give you `src/<app>/CLAUDE.md`. Read them before you start. Write the reproduction test as the **Testing** section of the guide says (backend: `PropertyBaseTestCase`, `CaptureTasksMixin`, the provider client mocked at the boundary; frontend: Vitest, Testing Library, `@/app/api/baseApi` mocked).
+
 All text in your output files follows the writing rules file (ASD-STE100 and S1000D, in Markdown). The file is `.flow/writing.md` in the worktree. Read it before you write.
