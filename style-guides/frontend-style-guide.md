@@ -1,5 +1,7 @@
 # Frontend Style Guide
 
+> Paths verified against SimpliHost commit `5a485fefb` on 2026-10-13 with `scripts/check-guide-paths.sh`. Record a rule the code does not follow in the PR body under **Review > Guide drift**; update this guide in the plugin repository.
+
 Rules for the React app in `src/frontend`. Written for coding agents: follow the rules as stated;
 when a rule says "use X", don't build an alternative.
 

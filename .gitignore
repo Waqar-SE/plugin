@@ -1,7 +1,13 @@
 /*
 !/.gitignore
+!/.gitattributes
 !/.claude-plugin
+!/.claude
 !/agents
 !/skills
 !/style-guides
+!/templates
+!/scripts
+!/retros
+/.claude/settings.local.json
 .DS_Store

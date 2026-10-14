@@ -1,5 +1,7 @@
 # Backend Style Guide
 
+> Paths verified against SimpliHost commit `5a485fefb` on 2026-10-13 with `scripts/check-guide-paths.sh`. Record a rule the code does not follow in the PR body under **Review > Guide drift**; update this guide in the plugin repository.
+
 Rules for the Django backend in `src/` (paths relative to `src/`), written for the developer or
 coding agent making the change. Reference implementations: `integrations/runited` (with
 `workers/rentalsunited.py`), `integrations/seamdevices`, `integrations/pricelabs`. Process
@@ -14,7 +16,8 @@ coding agent making the change. Reference implementations: `integrations/runited
    `<app>/selectors*`, `common/mixins.py`, `common/utils.py`, `common/api/serializers.py`,
    `common/admin.py`, `workers/utils.py`, `workers/event_router.py` (`EventRegistry.mappings`).
    Extend the existing method; don't add a parallel sibling.
-3. Find the closest existing feature and copy its shape (layout, names, tests).
+3. Find the closest existing feature and copy its shape (layout, names, tests), except a
+   static/class-method service class: write module functions instead (§2).
 4. Trace every caller of what you change; fix the shared function, not one path.
 5. Decide the test first (§20); know which `TEST_SUITE` entry it goes in.
 
@@ -64,12 +67,20 @@ Celery tasks live **only** in `workers/<area>.py`; task-side helpers in `workers
 - Business validation raises DRF `ValidationError` from the service.
 - One named writer per piece of state, stated in its docstring (`push_property` is the only writer
   of `RUProperty.owner`).
-- Service shapes: module functions for single operations (`ingest_reservation_data`);
-  static/class-method classes for a stateless lifecycle (`OwnerStripeConnectService.link`);
-  instances bound to a context (`OwnerPropertyAssignmentService(owner, company, actor=...)`).
-  Split a service or viewset that mixes responsibilities.
+- Services are module-level functions (`ingest_reservation_data`), following the Google Python
+  Style Guide (no `@staticmethod`; `@classmethod` only for alternate constructors), Python idiom
+  (the module is the namespace) and the Django service-layer style (one function per operation,
+  keyword-only arguments: `def hold_captured(*, request, charge_id)`). Callers import the module
+  and call `transactions.hold_captured(...)`; private helpers are `_` module functions.
+- Never a class made only of `@staticmethod`/`@classmethod` methods
+  (`TransactionLogService.hold_captured` is the shape to stop copying). A class is allowed only
+  when it holds real per-object state that several methods read
+  (`PaymentScheduleService(reservation)`); state passed to a single call is an argument.
+- New code follows this even where the app still uses namespace classes. Adding to an existing
+  namespace class inside a ticket: write a module function next to it, and don't convert the class
+  in the same PR (follow-up). Split a service or viewset that mixes responsibilities.
 - Logic shared by a worker and a webhook lives once in a service both call.
-- Selectors: module functions or a class per read model; follow the app you're in.
+- Selectors: module functions, same rules as services.
 - Dependency direction is integration → domain; the domain knows an integration only by reverse
   names (`Device.seam_link`).
 
@@ -320,7 +331,9 @@ Celery tasks live **only** in `workers/<area>.py`; task-side helpers in `workers
 
 ## 18. Code style
 
-- Names: `<Noun>Service`, `<Noun>Selector`, `<Noun>Adapter`; serializers `*List`, `*Detail`,
+- Names: service and selector functions are `verb_noun` in a module named for the area
+  (`services/transactions.py::record_hold`); `<Noun>Service` only for a stateful class (§2);
+  `<Noun>Adapter`; serializers `*List`, `*Detail`,
   `*Write`, `*Ref`; provider models prefixed (`RUOwner`). Name by intent. Private helpers `_`.
 - Function-level imports only to break cycles, with a comment.
 - A function does one thing; extract a named helper when a block needs a comment to say what it
@@ -329,8 +342,8 @@ Celery tasks live **only** in `workers/<area>.py`; task-side helpers in `workers
   frontend and migrations. No commented-out code; no `TODO` without a tracked work item.
 - Docstrings: first line says what, then *why*. Comments explain invariants and provider quirks.
   Type hints required on pydantic fields and dataclasses; otherwise follow the module.
-- Invariants an agent can't see in code go in `<app>/CLAUDE.md`; a convention change updates this
-  guide in the same branch.
+- Invariants an agent can't see in code go in `<app>/CLAUDE.md`. A convention the code departs from
+  is recorded in the PR body under **Review > Guide drift**; the guide is updated in the plugin repository.
 
 ## 19. Migrations
 

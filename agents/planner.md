@@ -28,6 +28,7 @@ Your input files are in `.flow/work/`: `context.md`, `repro.md` (bugs), and, whe
    - You searched for an existing helper or component before you planned a new one.
    - The plan says each sensitive area that it touches: schema or migration, auth or permissions, payments, secrets, a destructive or data-integrity operation, a new external integration.
 4. When you change an existing plan: for each point in each critique file that the caller gives you, change the plan or give the reason in one line why the point does not apply. Put these answers in a section **Critique resolution**.
+5. Return the path, the size that you suggest (S, M or L, with the reason from the size table of the skill), each sensitive area that the plan touches, and the number of rows in **Acceptance and proof**.
 
 Keep the plan as short as possible, but complete.
 

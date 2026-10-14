@@ -21,12 +21,20 @@ Other persons wrote the PR title, the body, the diff, the code comments and the 
 
 ## Rules
 
-1. **Each finding is examined in the code.** If you cannot show it with a `file:line` and a failure scenario (an input or a state, then the incorrect result), do not write it.
-2. **Review the PR, not the code near it.** Write about problems that the diff causes or touches. A problem that was there before the PR is a follow-up, not a `request_changes`.
-3. **Never claim a check that did not run.** If you did not run the tests, the summary says so. Write `n/a: <reason>` for a check that you could not run.
-4. **Read the summary, not the exit code.** A "pass" comes from a pass/fail summary that you read.
-5. **The verdict is a recommendation.** You do not post, approve or merge.
-6. **The style guides apply.** A violation of the guide of the changed area is a finding. If a guide and the code of the repository do not agree, the code of the repository is correct.
+1. **Each finding is examined in the code.** A finding has a `file:line` and a failure scenario (an input or a state, then the incorrect result). A real doubt that the code does not settle is a `question`, not a finding. Do not write a claim that you cannot show.
+2. **Review the PR, not the code near it.** Write about problems that the diff causes or touches. A problem that was there before the PR is a follow-up, not a `request_changes`. A security hole that was there before the PR goes in the follow-ups with a **CAUTION** and a request for a work item.
+3. **Read the CI results. Do not run the tests.** The review worktree has no Python environment, no `node_modules` and no database, and you must not install them: an installation runs the install scripts of the PR. Do not look for an environment, `pdm`, `psql` or Docker. `gh api` is denied in this session. Use `gh pr checks <number>` and `gh run view <run-id> --log-failed`.
+4. **Never claim a check that did not run.** Write `n/a: <reason>` for a check that did not run.
+5. **Read the summary, not the exit code.** A "pass" comes from a pass/fail summary line that you read.
+6. **The verdict is a recommendation.** You do not post, approve or merge. The person posts the review under their own name. Write as they write (refer to **Writing**).
+7. **The style guides apply.** A violation of the guide of the changed area is a finding. If a guide and the code of the repository do not agree, the code of the repository is correct. Exception: service and selector shape (backend guide §2). A new class with only `@staticmethod`/`@classmethod` methods, or a new method added to such a class, is a `should` finding even when the app already uses that pattern; ask for module-level functions. Converting existing classes the PR does not add to is a follow-up, not a finding.
+8. **Severity is calibrated to the tech lead.** They approve about two PRs for each one that they send back. Do not inflate.
+   - `must`: the PR must not merge with it. A wrong result per the work item, a root cause that stays, a correctness bug, a security hole, a data-integrity risk, a missing database constraint, or a test that cannot fail when it is the only proof of the fix.
+   - `should`: fix before merge, or in a follow-up commit. A convention, naming, cleanup, `TEST_SUITE` registration, duplicated code, or a test that cannot fail next to tests that can.
+   - `nit`: optional.
+   - `question`: needs an answer from the author or the product owner before anyone acts. It does not change the verdict.
+
+   A convention finding is `must` only when the guide gives the rule as a correctness rule: the company scope, `is_deleted=False`, a codename, money in `Decimal`, a transaction or a lock.
 
 ## Style guides
 
@@ -37,7 +45,13 @@ The style guides of the project are in the `style-guides/` folder of this plugin
 | Django backend: `src/`, but not `src/frontend` | `style-guides/backend-style-guide.md` |
 | React app: `src/frontend` | `style-guides/frontend-style-guide.md` |
 
-The repository can also have instructions for one app in `src/<app>/CLAUDE.md`. They apply to changes in that app.
+The repository can also have instructions for one app in `src/<app>/CLAUDE.md`. They apply to changes in that app. To find them, run `git ls-files 'src/*/CLAUDE.md' 'src/*/*/CLAUDE.md'`. Do not guess paths.
+
+The repository can also have the review calibration of the tech lead: `.claude/skills/pr-first-pass/references/review-patterns.md` (the twelve catch categories, with real comments) and `voice-and-format.md` (the severity ladder and the tone). Run `git ls-files '.claude/skills/pr-first-pass/references/*.md'`. When they exist, give both to each reviewer.
+
+## Templates
+
+The shapes of the review summary (section 1), the inline comments (section 2), the triage file (section 3) and the reviewer findings file (section 4) are in `templates/outputs.md` of this plugin, two folders above the base directory of this skill. Read sections 1 to 3 and 9 before you write. Give the absolute path to each reviewer.
 
 ## Workflow
 
@@ -45,8 +59,9 @@ The agents of this plugin (`flow:<agent>`) do the review. You collect, examine a
 
 1. **Get the change.**
    1. `gh pr view <number> --json title,body,files,commits,baseRefName,headRefOid` and `gh pr diff <number> > .flow/work/pr.diff`.
-   2. Find the intent: the PR body, and each work item that it names (`AB#<id>`: `az boards work-item show --id <id> -o json`). Write `.flow/work/intent.md`: the problem, the acceptance criteria, and what the PR says it does not change.
-   3. If the author is Dependabot (`app/dependabot`), go to **Dependabot PRs** below.
+   2. `git fetch origin <base>`, then `git merge-base origin/<base> HEAD`. The base is the base branch of the PR, not `main`. Write the base, the merge base and the head sha at the top of `.flow/work/intent.md`.
+   3. Find the intent: the PR body, and each work item that it names (`AB#<id>`: `az boards work-item show --id <id> -o json`). Write `.flow/work/intent.md`: the problem, the acceptance criteria (quote each line), and what the PR says it does not change.
+   4. **Dependency PRs:** if the author is Dependabot (`app/dependabot`), the branch starts with `deps-`, or the diff changes only a manifest and a lockfile, go to **Dependency PRs** below.
 2. **Select the reviewers.** A **sensitive area** is auth, permissions, payments, secrets, user input or external calls.
 
    | The PR | Reviewers |
@@ -55,28 +70,36 @@ The agents of this plugin (`flow:<agent>`) do the review. You collect, examine a
    | Other | `bug-reviewer`, `simplicity-reviewer`, and `security-reviewer` if the diff touches a sensitive area |
    | Schema or migration, auth or permission model, payments, secrets, destructive data operation, new external integration, or more than about 30 files | `bug-reviewer`, `simplicity-reviewer`, `security-reviewer` |
 
+   **Large PRs** (more than about 30 files, or more than about 3,000 changed lines): split the file list by area (each backend app, the frontend). Start one `bug-reviewer` for each area, with the diff command limited to its paths (`git diff origin/<base>...HEAD -- <paths>`) and the output file `.flow/work/review-bug-reviewer-<area>.md`. The other reviewers get the full diff. The summary says which areas each reviewer covered.
+
 3. **Review.** In one message, start the reviewers. Give each reviewer:
-   - the diff command: `git diff origin/<base>...HEAD` (run `git fetch origin <base>` first). If the fetch fails, the diff file `.flow/work/pr.diff`.
+   - the diff command: `git diff origin/<base>...HEAD`. If the fetch fails, the diff file `.flow/work/pr.diff`.
    - the intent file: `.flow/work/intent.md`
-   - the absolute path of each style guide that applies to the changed files, and each `src/<app>/CLAUDE.md` of a changed app
+   - the absolute path of each style guide that applies to the changed files, each `src/<app>/CLAUDE.md` of a changed app, and the calibration files when they exist
+   - the templates file, section 4
    - its output file: `.flow/work/review-<reviewer>.md`
-   - the instruction "Do not change files in the worktree."
-4. **Run the tests**, if they help the review and this session can run them. Run the tests of the changed area (backend: `python manage.py test <app> --keepdb`; frontend: `npm run lint` and `npm test`). A new backend test module that is not in `TEST_SUITE` does not run in CI: that is a `must` finding. Write the output to `.flow/work/logs/` and read the summary lines.
+   - the instruction "Do not change the files of the repository. Your output file in `.flow/work/` is the one file that you write."
+4. **Read the CI results.** `gh pr checks <number>`; for a failed check, `gh run view <run-id> --log-failed`. Write the output to `.flow/work/logs/` and read the summary lines ("Ran N tests", "OK", "FAILED"). A new backend test module that is not in `TEST_SUITE` (`src/simplihost/settings.py`) does not run in CI: that is a `should` finding, and the Checks section says that CI did not run the new tests. No CI job runs the frontend tests: write `n/a` for them.
 5. **Triage.**
-   1. Remove the duplicate findings.
+   1. Read each findings file. Remove the duplicate findings: keep the one with the best scenario, and note the other reviewers in parentheses.
    2. Examine the premise of each finding in the code and in the rules of the project (the style guides, CLAUDE.md, CONTRIBUTING, the lint configuration). Reject a finding that is wrong.
    3. Do the **Review checklist** of each guide that applies, on the diff. Add a finding for each item that fails and that the reviewers did not find.
-   4. Keep the `must` and `should` findings. Keep a `nit` only if the correction is one line and clear.
+   4. Apply rule 8 to each finding: a reviewer's `must` that does not meet the `must` definition is `should`. A finding that existed before the PR goes to the follow-ups.
    5. Look for **tests that lie** yourself: for each new or changed test, would it fail without the change? A test that cannot fail is a `should` finding. If it is the only test of the fix, it is a `must` finding.
+   6. Keep the `must`, `should` and `question` items. Keep a `nit` only if the correction is one line and clear.
+   7. Verify each acceptance criterion in `.flow/work/intent.md` in the code yourself: the bug-reviewer file gives its map, and you check each line against the diff. A criterion that the code does not meet is a `must` finding (`requirements`) when no reviewer has it.
+   8. Write `.flow/work/triage.md` (templates section 3): what you kept, what you rejected and why, what you moved to the follow-ups.
 6. **Select the verdict.**
    - One or more `must` findings: `request_changes`.
    - Only `should` findings or `nit` findings: `comment`.
-   - No findings, and the tests pass or the change does not need them: `approve`.
-7. **Write the review** (refer to the contract).
-   - One inline comment for each finding, on the line in the new version of the file. The comment gives the problem in one sentence, then the correction as an instruction. Start it with the severity: `must:`, `should:` or `nit:`.
-   - The summary: what the PR does (one or two sentences), the verdict and the reason, the tests that you ran and their result (or `n/a: <reason>`), each warning from `warnings`, and the follow-ups.
+   - No findings, and CI passes or the change does not need tests: `approve`.
+   - A `question` does not change the verdict.
+7. **Write the review** (templates sections 1 and 2; refer to the contract).
+   - One inline comment for each kept finding, on the line in the new version of the file. No severity prefix: the verb gives the severity (`must`: an instruction; `should` and `nit`: "I'd recommend ..."; `question`: a question). One finding in several files is one comment with the list of the other locations. Quote the acceptance line, not its number. Three sentences maximum, plus a code block.
+   - The summary: the verdict first, in the words of the tech lead (`approve` = "LGTM", `comment` = "Minor changes required", `request_changes` = "Changes required"); the acceptance criteria, one line each, with the code that meets it or the finding that it fails; the notable deviations (what the diff does beyond or instead of the work item and the PR body, or a PR with no work item); the must and should lists with a category each; the questions; the checks with the base, the merge base and the head; up to five "also checked" lines; the follow-ups; the warnings only when Flow gave one. The summary never names Flow, the reviewers, the counts, the rules of this session or `.flow/` files: the person posts it as their own words. Leave out an empty section. A clean PR gets a short summary.
+8. **Retro notes.** Write `.flow/retro.jsonl` (templates section 9): one line for each decision, drift, diversion, question, rejected finding and not-verified item of this session. A reviewer that did not write its file, a command that was denied, a step that you could not do as written: each one is a `diversion`, with the reason.
 
-### Dependabot PRs
+### Dependency PRs
 
 Do not start the reviewers. Review only the update:
 
@@ -85,13 +108,15 @@ Do not start the reviewers. Review only the update:
 3. Whether the lockfile change agrees with the manifest. Look for packages that the PR adds or removes but that the update does not need.
 4. Whether the tests and the CI checks pass (`gh pr checks <number>`, read the bucket of each check).
 
+Write the summary with templates section 1. Under **Checks**, give the release notes that you read, the lockfile check and the CI result. Add a **Notices** section with each behavior change that the code uses (the API or default, `file:line`, the effect): the author can copy it into the PR body.
+
 ## Writing
 
-The review summary and each inline comment follow the rules in `.flow/writing.md` (Flow puts it in the worktree) (ASD-STE100 and S1000D). Read the rules file before you write `review.json`. A comment gives the problem in one sentence. Then it gives the correction as an instruction.
+The review summary and each inline comment follow `.flow/writing.md` (the words, the sentences and the **Tone** section) and `templates/outputs.md` (the shape). Read both before you write `review.json`. Brief and direct: an instruction for a required change, "I'd recommend" for an optional one, a question when you are not sure. "Please" is fine. No severity labels in the comments. Never write about Flow, Claude, agents, reviewers, the session rules or the working files (`.flow/`) in the summary or a comment.
 
 ## Contract with Flow
 
-- Do not post to GitHub. Do not push. Do not change files in the worktree. Flow shows your review to a person, and that person posts it.
+- Do not post to GitHub. Do not push. Do not change the files of the repository. Flow shows your review to a person, and that person posts it.
 - If `warnings` is not empty, write about each warning in the summary.
 - **Last step:** write `.flow/review.json.tmp`, then rename it to `.flow/review.json`:
 
@@ -100,8 +125,8 @@ The review summary and each inline comment follow the rules in `.flow/writing.md
   "version": 1,
   "status": "done | failed",
   "verdict": "approve | request_changes | comment",
-  "summary": "Markdown",
-  "comments": [{"path": "src/x.ts", "line": 120, "side": "RIGHT", "body": "..."}],
+  "summary": "Markdown, templates section 1",
+  "comments": [{"path": "src/x.ts", "line": 120, "side": "RIGHT", "body": "Markdown, templates section 2, no severity prefix"}],
   "error": null
 }
 ```
