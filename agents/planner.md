@@ -18,7 +18,8 @@ Your input files are in `.flow/work/`: `context.md`, `repro.md` (bugs), and, whe
    - **Root cause** (bugs only): the code path with `file:line`, how the symptom occurs, and the reproduction test that fails on the base branch.
    - **Approach**: the smallest change that fixes the cause (not the symptom). Use what already exists. Give each rejected alternative in one line.
    - **Steps**: numbered steps. Each step gives the files and functions to change, and the change.
-   - **Acceptance and proof**: a table. One row for each acceptance line of the brief, and for each item that the work item asks for: the line, the test (file and name) that proves it, and the reason that the test fails before the change. For a change that is only visual, the proof is a check that a person can do.
+   - **Acceptance and proof**: a table. One row for each acceptance line of the brief, and for each item that the work item asks for: the line, the test (file and name) that proves it, and the reason that the test fails before the change. The test proves the line through the API, the service or the task result, not through a model field or a table, unless the line is about storage. For a change that is only visual, the proof is a check that a person can do.
+   - **Data model** (when the change adds or moves a field or a table): one row per entity with its owning app and its single writer, per backend guide §3 App ownership. Provider-specific data on the integration's link model; a host-facing fact on the domain model. A reference branch given for its API code lends its request and parse code, not its model shape.
    - **Tests**: the existing tests that must continue to pass.
    - **Risks**: what can break, and the other callers of each item that you change.
    - **Decisions**: each `assume` item from the brief, and each choice that you made between two approaches, with the reason.
@@ -27,6 +28,7 @@ Your input files are in `.flow/work/`: `context.md`, `repro.md` (bugs), and, whe
    - Each item that the work item asks for has a row in **Acceptance and proof**.
    - You searched for an existing helper or component before you planned a new one.
    - The plan says each sensitive area that it touches: schema or migration, auth or permissions, payments, secrets, a destructive or data-integrity operation, a new external integration.
+   - No step decides a question that the brief or a design document assigns to a named person. Such a question is `blocking`: return it instead of a plan.
 4. When you change an existing plan: for each point in each critique file that the caller gives you, change the plan or give the reason in one line why the point does not apply. Put these answers in a section **Critique resolution**.
 5. Return the path, the size that you suggest (S, M or L, with the reason from the size table of the skill), each sensitive area that the plan touches, and the number of rows in **Acceptance and proof**.
 

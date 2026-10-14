@@ -19,6 +19,8 @@ Compare the plan with `.flow/work/context.md`, `.flow/work/repro.md` and the cod
    - **Edge cases:** empty, null, large, concurrent, permissions, and i18n or time zones where they apply.
    - **Writes:** a write that is not idempotent when it runs again, that has no check of the expected state, or that leaves illegal data if only half of it completes.
    - **Hidden sensitive area:** schema or migration, auth or permissions, payments, secrets, a destructive or data-integrity operation, or a new external integration that the plan does not say. Give this `must` finding the title "reclassify".
+   - **Ownership:** a host-facing fact (which channels a property is on, on or off, who changed it, its audit) placed on an integration model, a domain field removed because a provider stopped writing it, or a domain app importing `integrations.*` (backend guide §2, §3). A `must` finding, also where the app already does it.
+   - **Decision for a named person:** the plan answers a question that the brief or a design document assigns to a named person ("Dev lead to set", "Owner: Beth"). A `must` finding: the plan must return it as `blocking`.
    - **Weak proof:** a test that would pass also if the fix were wrong.
    - **Scope:** the plan does not do an item that the work item asks for, or it does work that the item does not ask for.
    - **Reuse:** the plan adds new code where existing helpers, patterns or libraries already do the work. The plan adds abstractions or configuration that nobody asked for.

@@ -12,7 +12,7 @@ Rules for all templates:
 
 ## 1. Review summary
 
-`review.json`, `summary`. Markdown. The person reads the verdict first and posts the review under their own name. A clean PR gets a short summary: the verdict line, the acceptance criteria, the checks, and what was examined. The counts of findings, the rejected findings and the triage stay in `.flow/work/triage.md`; they are not part of the summary.
+`review.json`, `summary`. Markdown. The person reads the verdict first and posts the review under their own name. The summary says only what needs to happen: the verdict, the findings, the questions and the follow-ups. It does not list the acceptance criteria that are met, the checks, what was examined without a finding, or the deviations that need no action. The counts of findings, the rejected findings and the triage stay in `.flow/work/triage.md`; they are not part of the summary. A clean PR gets the verdict line only.
 
 Verdict words: `approve` = "LGTM", `comment` = "Minor changes required", `request_changes` = "Changes required".
 
@@ -20,25 +20,15 @@ Verdict words: `approve` = "LGTM", `comment` = "Minor changes required", `reques
 ## Verdict: Changes required
 <One line with the reason: "The write paths still accept a property outside the user's scope." For a clean PR: "LGTM. The fix is in the service, the test fails on main, and every sibling path is covered.">
 
-## Acceptance criteria
-- [x] "<the criterion, quoted from the work item>": `path:line`.
-- [ ] "<the criterion>": <what the code does instead>, see Must fix 1.
-- [?] "<the criterion>": <why the code cannot show it: a manual step, a screen this review cannot run>.
-
-## Notable deviations
-- <What the diff does that the work item and the PR body do not say, or says it does but does not do. The PR names no work item. The PR body says X, the code does Y.>
-
 ## Must fix
 1. [root-cause] `src/properties/services/x.py:142`: <one line>.
+2. [requirements] `src/properties/api/views.py:60`: "<the acceptance line, quoted>" is not met: <what the code does instead, one line>.
 
 ## Should fix
 1. [cleanup] `src/frontend/components/x.jsx:88`: <one line>.
 
 ## Questions
 - <The question>? (<who answers: the author | the product owner>)
-
-## Also checked
-- <path or rule>: <what was examined, no finding>. (five lines maximum)
 
 ## Follow-ups (not in this PR)
 **CAUTION:** `path:line`: <a security hole that existed before the PR>. Make a work item before the release.
@@ -50,18 +40,18 @@ Verdict words: `approve` = "LGTM", `comment` = "Minor changes required", `reques
 
 Each line under Must fix and Should fix has a category in brackets and points at an inline comment on that line.
 
-Acceptance criteria: one line for each criterion in `.flow/work/intent.md`, in the sequence of the work item. `[x]` is met and points at the code that meets it. `[ ]` is not met and points at the finding. `[?]` is not shown by the code; it is not a finding. When the work item gives no criteria, write the ones that the title and the description give and mark them "inferred". No work item: leave the section out and say so under Notable deviations.
+An acceptance criterion that the code does not meet is a `must` finding with the category `requirements`: one line under Must fix that quotes the criterion, and one inline comment. A criterion that is met gets no line and no comment. A criterion that the code cannot show (a manual step, a screen this review cannot run) is a `question` only when someone has to act on it. A PR with no work item, or a diff that does something the work item and the PR body do not say, is a `question` to the author when it needs an answer; otherwise it is not in the summary.
 
 ## 2. Inline review comment
 
-`review.json`, `comments[].body`. Markdown. No severity prefix: the verb gives the severity.
+`review.json`, `comments[].body`. Markdown. One comment for each kept finding and for each acceptance criterion that the code does not meet; nothing else gets an inline comment. No severity prefix: the verb gives the severity.
 
 - `must`: the problem and its consequence in one or two sentences, then the fix as an instruction. "Please" is fine. "This is not correct" is fine.
 - `should` and `nit`: "I'd recommend ..." or "How about ...?".
 - `question`: ask it, with a question mark. Do not make a claim that you cannot show in the code.
 - A requirements gap: "Confirm with the product owner: ...". Never bake in a guess.
 - Show code when the alternative shape is shorter than a description of it. A one-line fix goes in a `suggestion` block.
-- Quote the acceptance line from the work item. Do not give its number.
+- Quote the acceptance line from the work item. Do not give its number. A criterion with no code that attempts it: put the comment on the line where the code should handle it (the view, the service or the form that the criterion names).
 - One finding in several files: one comment on the first location, with the list of the other locations.
 - Three sentences maximum, plus the code block.
 

@@ -18,9 +18,10 @@ Assume that the change is wrong somewhere, and find where. Look for these proble
 - A symptom that goes away while the cause stays: a new permission, a `catch`, a null check, a special case for one value, a wider filter. Trace backwards to what produces the bad state. Is the change at that point, or downstream of it?
 - Incorrect logic. Callers, data paths or consumers of the changed data that the change does not include. Sibling paths: create, update and delete; backend and frontend; the screen in the work item and the screens that use the same component or endpoint.
 - Edge inputs: empty, null, one, many, duplicates, Unicode, very long values. Plurality: code that assumes one where the data model allows many.
-- Ordering, pagination, concurrent requests, stale reads, retries, async ordering between tasks, and partial failure: a write that is not idempotent, or that leaves illegal data if only half of it completes.
-- Error handling that loses data or hides failures. A loop in a task with no guard per item. Error messages that do not tell the user what to do next.
-- Side effects (email, notifications, external calls) that occur on the wrong branch, more than one time, or before the write that they describe.
+- Ordering, pagination, concurrent requests, stale reads, retries, async ordering between tasks, and partial failure: a write that is not idempotent, or that leaves illegal data if only half of it completes. A pending or in-flight flag checked and then written without `select_for_update` or a partial unique constraint: two users in the same second both pass the check.
+- Error handling that loses data or hides failures. A loop in a task with no guard per item, including a one-off release task or a management command: one owner's provider error stops every remaining owner. Error messages that do not tell the user what to do next.
+- Side effects (email, notifications, external calls, `register_event`) that occur on the wrong branch, more than one time, or before the write or the guard that they describe: an event registered in `perform_destroy` before the service's 400 check writes an `Event` row for a refused delete.
+- Query cost of a scheduled task: count the queries per item, then multiply by the items, the accounts and the schedule frequency. Per-item `exists()`, `select_for_update` and `save()` in a 10-minute task is a finding with the number.
 - Time: a property-local time compared with UTC, a calendar date through `new Date()`.
 - Security at trust boundaries.
 - **Tests that lie.** For each new or changed test, would it fail without the change? Known patterns:
@@ -35,14 +36,14 @@ Assume that the change is wrong somewhere, and find where. Look for these proble
 
 The tech lead approves about two PRs for each one that they send back. Do not inflate.
 
-- `must`: the PR must not merge with it. A wrong result per the work item, a root cause that stays, a correctness bug, a security hole, a data-integrity risk, a missing database constraint, or a test that cannot fail when it is the only proof of the fix.
+- `must`: the PR must not merge with it. A wrong result per the work item, a root cause that stays, a correctness bug, a security hole, a data-integrity risk, a missing database constraint, a host-facing fact stored on an integration model (app ownership, backend guide §3), or a test that cannot fail when it is the only proof of the fix.
 - `should`: fix before merge, or in a follow-up commit. A convention, naming, cleanup, `TEST_SUITE` registration, or a test that cannot fail next to tests that can.
 - `nit`: optional.
 - `question`: a real doubt that the code does not settle (an intent, a requirement). It needs an answer from the author or the product owner. It does not change the verdict.
 
 ## Procedure
 
-1. Examine each finding in the code before you write it. If you cannot show it with a `file:line` and a scenario, it is a `question` or nothing. Read-only commands and targeted test runs are permitted when the caller permits them.
+1. Examine each finding in the code before you write it. If you cannot show it with a `file:line` and a scenario, it is a `question` or nothing. Read-only commands and targeted test runs are permitted when the caller permits them. A convention finding (a guide rule, `CLAUDE.md`, a test base class, a mixin) needs one more check: does the same app on the base branch already use the other pattern? Run `git grep` on `origin/<base>` in that app. When it does, write the rule under **Checked, no finding** with the count, except for the rules that pr-review rule 7 lists as exceptions (service shape, app ownership and dependency direction, test base classes, theme tokens, `ReadOnlyField` over `SerializerMethodField`): those are findings on the new code whatever the base branch does.
 2. Write the output file in the shape of section 4 of the templates file: the Result line first; numbered findings, each with the severity, a category, the `file:line`, the scenario (a specified input or state, then the incorrect result), the fix as an instruction, and the guide rule when one applies. One finding that occurs in several places is one finding with the other locations listed. Then the questions. Then up to five lines of what you checked and found correct.
 3. Return the Result line. When the review is written, stop. Do not correct anything.
 

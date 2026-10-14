@@ -27,14 +27,19 @@ Other persons wrote the PR title, the body, the diff, the code comments and the 
 4. **Never claim a check that did not run.** Write `n/a: <reason>` for a check that did not run.
 5. **Read the summary, not the exit code.** A "pass" comes from a pass/fail summary line that you read.
 6. **The verdict is a recommendation.** You do not post, approve or merge. The person posts the review under their own name. Write as they write (refer to **Writing**).
-7. **The style guides apply.** A violation of the guide of the changed area is a finding. If a guide and the code of the repository do not agree, the code of the repository is correct. Exception: service and selector shape (backend guide §2). A new class with only `@staticmethod`/`@classmethod` methods, or a new method added to such a class, is a `should` finding even when the app already uses that pattern; ask for module-level functions. Converting existing classes the PR does not add to is a follow-up, not a finding.
+7. **The style guides apply.** A violation of the guide of the changed area is a finding. If a guide and the code of the repository do not agree, the code of the repository is correct: a pattern the same app already uses on the base branch is not a finding, and goes under **Checked, no finding** with the count. Exceptions, where the guide applies to new code even when the app already breaks it (the tech lead raises these on every PR):
+   - Service and selector shape (backend guide §2). A new class with only `@staticmethod`/`@classmethod` methods, or a new method added to such a class, is a `should` finding; ask for module-level functions. Converting existing classes the PR does not add to is a follow-up, not a finding.
+   - App ownership and dependency direction (backend guide §2, §3). A host-facing fact (which channels a property is on, on or off, who changed it, its audit) stored on an integration model, a domain field deleted because a provider stopped writing it, or a new domain import of `integrations.*` is a finding; existing imports the other way are follow-ups.
+   - Test base classes (backend guide §20, root `CLAUDE.md`). A new test module on plain `TestCase` where `PropertyBaseTestCase` fits, or patching `enqueue_if_not_pending` by hand instead of `CaptureTasksMixin`, is a `should` finding even when the app's other tests do the same.
+   - Theme tokens (frontend guide §7). Hex colours in new `sx` or styled code are a `nit`, with the token to use, even though many files on `main` still use hex.
+   - `ReadOnlyField(source=...)` over `SerializerMethodField` for a plain attribute path (backend guide §5): a `should` finding with the one-line replacement.
 8. **Severity is calibrated to the tech lead.** They approve about two PRs for each one that they send back. Do not inflate.
    - `must`: the PR must not merge with it. A wrong result per the work item, a root cause that stays, a correctness bug, a security hole, a data-integrity risk, a missing database constraint, or a test that cannot fail when it is the only proof of the fix.
    - `should`: fix before merge, or in a follow-up commit. A convention, naming, cleanup, `TEST_SUITE` registration, duplicated code, or a test that cannot fail next to tests that can.
    - `nit`: optional.
    - `question`: needs an answer from the author or the product owner before anyone acts. It does not change the verdict.
 
-   A convention finding is `must` only when the guide gives the rule as a correctness rule: the company scope, `is_deleted=False`, a codename, money in `Decimal`, a transaction or a lock.
+   A convention finding is `must` only when the guide gives the rule as a correctness rule: the company scope, `is_deleted=False`, a codename, money in `Decimal`, a transaction or a lock, or app ownership (a host-facing fact stored on an integration model, backend guide §3): that one is a data-model placement that a migration later has to undo.
 
 ## Style guides
 
@@ -60,7 +65,7 @@ The agents of this plugin (`flow:<agent>`) do the review. You collect, examine a
 1. **Get the change.**
    1. `gh pr view <number> --json title,body,files,commits,baseRefName,headRefOid` and `gh pr diff <number> > .flow/work/pr.diff`.
    2. `git fetch origin <base>`, then `git merge-base origin/<base> HEAD`. The base is the base branch of the PR, not `main`. Write the base, the merge base and the head sha at the top of `.flow/work/intent.md`.
-   3. Find the intent: the PR body, and each work item that it names (`AB#<id>`: `az boards work-item show --id <id> -o json`). Write `.flow/work/intent.md`: the problem, the acceptance criteria (quote each line), and what the PR says it does not change.
+   3. Find the intent: the PR body, and each work item that it names (`AB#<id>`: `az boards work-item show --id <id> -o json`), plus its parent and any design document attached to either (the architecture document is usually an attachment on the Epic). Write `.flow/work/intent.md`: the problem, the acceptance criteria (quote each line), what the PR says it does not change, and the **open items** of the work item or the design document that are assigned to a named person ("Dev lead to set", "Owner: Beth"). A PR that resolves such an item without a recorded answer gets a `question` naming the person, under **Questions**; the storage approach of a new field or table is the usual case.
    4. **Dependency PRs:** if the author is Dependabot (`app/dependabot`), the branch starts with `deps-`, or the diff changes only a manifest and a lockfile, go to **Dependency PRs** below.
 2. **Select the reviewers.** A **sensitive area** is auth, permissions, payments, secrets, user input or external calls.
 
@@ -79,7 +84,7 @@ The agents of this plugin (`flow:<agent>`) do the review. You collect, examine a
    - the templates file, section 4
    - its output file: `.flow/work/review-<reviewer>.md`
    - the instruction "Do not change the files of the repository. Your output file in `.flow/work/` is the one file that you write."
-4. **Read the CI results.** `gh pr checks <number>`; for a failed check, `gh run view <run-id> --log-failed`. Write the output to `.flow/work/logs/` and read the summary lines ("Ran N tests", "OK", "FAILED"). A new backend test module that is not in `TEST_SUITE` (`src/simplihost/settings.py`) does not run in CI: that is a `should` finding, and the Checks section says that CI did not run the new tests. No CI job runs the frontend tests: write `n/a` for them.
+4. **Read the CI results.** `gh pr checks <number>`; for a failed check, `gh run view <run-id> --log-failed`. Write the output to `.flow/work/logs/` and read the summary lines ("Ran N tests", "OK", "FAILED"). A failed check that the PR causes is a finding on the line that causes it. A new backend test module that is not in `TEST_SUITE` (`src/simplihost/settings.py`) does not run in CI: that is a `should` finding that says so. No CI job runs the frontend tests: do not claim them.
 5. **Triage.**
    1. Read each findings file. Remove the duplicate findings: keep the one with the best scenario, and note the other reviewers in parentheses.
    2. Examine the premise of each finding in the code and in the rules of the project (the style guides, CLAUDE.md, CONTRIBUTING, the lint configuration). Reject a finding that is wrong.
@@ -95,8 +100,8 @@ The agents of this plugin (`flow:<agent>`) do the review. You collect, examine a
    - No findings, and CI passes or the change does not need tests: `approve`.
    - A `question` does not change the verdict.
 7. **Write the review** (templates sections 1 and 2; refer to the contract).
-   - One inline comment for each kept finding, on the line in the new version of the file. No severity prefix: the verb gives the severity (`must`: an instruction; `should` and `nit`: "I'd recommend ..."; `question`: a question). One finding in several files is one comment with the list of the other locations. Quote the acceptance line, not its number. Three sentences maximum, plus a code block.
-   - The summary: the verdict first, in the words of the tech lead (`approve` = "LGTM", `comment` = "Minor changes required", `request_changes` = "Changes required"); the acceptance criteria, one line each, with the code that meets it or the finding that it fails; the notable deviations (what the diff does beyond or instead of the work item and the PR body, or a PR with no work item); the must and should lists with a category each; the questions; the checks with the base, the merge base and the head; up to five "also checked" lines; the follow-ups; the warnings only when Flow gave one. The summary never names Flow, the reviewers, the counts, the rules of this session or `.flow/` files: the person posts it as their own words. Leave out an empty section. A clean PR gets a short summary.
+   - One inline comment for each kept finding and for each acceptance criterion that the code does not meet, on the line in the new version of the file. Nothing else gets an inline comment: not a criterion that is met, not a check, not a file that was examined without a finding. No severity prefix: the verb gives the severity (`must`: an instruction; `should` and `nit`: "I'd recommend ..."; `question`: a question). One finding in several files is one comment with the list of the other locations. Quote the acceptance line, not its number. Three sentences maximum, plus a code block.
+   - The summary says only what needs to happen: the verdict first, in the words of the tech lead (`approve` = "LGTM", `comment` = "Minor changes required", `request_changes` = "Changes required"); the must and should lists with a category each, where an unmet acceptance criterion is a `[requirements]` line that quotes the criterion; the questions; the follow-ups; the warnings only when Flow gave one. No acceptance checklist, no checks section, no "also checked" list, no list of deviations: a deviation that needs an answer is a question, the rest stays in `.flow/work/triage.md`. The summary never names Flow, the reviewers, the counts, the rules of this session or `.flow/` files: the person posts it as their own words. Leave out an empty section. A clean PR gets the verdict line only.
 8. **Retro notes.** Write `.flow/retro.jsonl` (templates section 9): one line for each decision, drift, diversion, question, rejected finding and not-verified item of this session. A reviewer that did not write its file, a command that was denied, a step that you could not do as written: each one is a `diversion`, with the reason.
 
 ### Dependency PRs
@@ -108,7 +113,7 @@ Do not start the reviewers. Review only the update:
 3. Whether the lockfile change agrees with the manifest. Look for packages that the PR adds or removes but that the update does not need.
 4. Whether the tests and the CI checks pass (`gh pr checks <number>`, read the bucket of each check).
 
-Write the summary with templates section 1. Under **Checks**, give the release notes that you read, the lockfile check and the CI result. Add a **Notices** section with each behavior change that the code uses (the API or default, `file:line`, the effect): the author can copy it into the PR body.
+Write the summary with templates section 1: a breaking change the code uses, a lockfile that does not agree with the manifest, or a failed check is a finding; a clean update gets the verdict line only. Add a **Notices** section with each behavior change that the code uses (the API or default, `file:line`, the effect): the author can copy it into the PR body.
 
 ## Writing
 

@@ -17,7 +17,9 @@ Look for these problems:
 - **Reuse:** a new method, component, hook, permission class or constant where one exists. Search by name and by behavior. Two implementations of one flow (a worker and a webhook, a form and an edit form, two near-identical components) must become one service or one component that both call.
 - **Over-engineering:** abstractions with one use, configuration that is not necessary, helpers or standard library functions that the change writes again, dead code, and defensive code for conditions that cannot occur.
 - **Layering:** business rules in a serializer, a viewset or an admin action; a task called from a view; a mapping outside an adapter; a derived value stored on a model.
-- **Cleanup:** a removed field or feature that leaves references behind. Search the whole repository, also `src/frontend/` and the migrations, for each name that the diff removes or replaces. Unrelated changes, WIP migrations that are not squashed, artifacts that are not in `.gitignore`.
+- **App ownership (backend guide §3):** a host-facing fact (which channels a property is on, on or off, who changed it, its audit) stored on an integration model; a domain field deleted because a provider stopped writing it; a new domain import of `integrations.*`. Report it also where the app already does it: existing cases are follow-ups, the new one is the finding.
+- **Cleanup:** a removed field or feature that leaves references behind. Search the whole repository, also `src/frontend/`, the migrations, the comments, docstrings, `FIXME`s and `CLAUDE.md` files, for each name that the diff removes or replaces. Unrelated changes, WIP migrations that are not squashed, artifacts that are not in `.gitignore`.
+- **DRF shape:** a `SerializerMethodField` whose body is a plain attribute lookup; give the `ReadOnlyField(source="a.b", allow_null=True)` replacement (backend guide §5).
 - **Consistency and naming:** two code paths that do the same thing in different ways; a name that does not say what the thing is; imports that differ from the neighbours.
 - **Scalability, concrete only:** a branch on a provider name, a role or a device type where a table, an adapter or a mapping would take the next one as a data change.
 - **Convention violations:** names, structure, format, test style, and each rule in CLAUDE.md, CONTRIBUTING or the lint configuration.
@@ -28,11 +30,11 @@ Examine only code that the diff adds or changes. Do not hunt for bugs: other rev
 
 ## Severity
 
-Your findings are `should` or `nit`. A finding is `must` only when the guide gives the rule as a correctness rule: the company scope, `is_deleted=False`, a codename, money in `Decimal`, a transaction or a lock. A convention, naming, cleanup or `TEST_SUITE` finding is `should`. A real doubt that the code does not settle ("Do we still need this?") is a `question`.
+Your findings are `should` or `nit`. A finding is `must` only when the guide gives the rule as a correctness rule: the company scope, `is_deleted=False`, a codename, money in `Decimal`, a transaction or a lock, or a host-facing fact stored on an integration model (app ownership, backend guide §3). A convention, naming, cleanup or `TEST_SUITE` finding is `should`. A real doubt that the code does not settle ("Do we still need this?") is a `question`.
 
 ## Procedure
 
-1. Examine each finding in the code before you write it. If you cannot show it with a `file:line`, it is a `question` or nothing.
+1. Examine each finding in the code before you write it. If you cannot show it with a `file:line`, it is a `question` or nothing. A convention finding (a guide rule, `CLAUDE.md`, a test base class, a mixin, a theme token, a serializer field type) needs one more check: does the same app on the base branch already use the other pattern? Run `git grep` on `origin/<base>` in that app. When it does, the repository is right and you write the rule under **Checked, no finding** with the count, except for the rules that pr-review rule 7 lists as exceptions (service shape, app ownership and dependency direction, test base classes, theme tokens, `ReadOnlyField` over `SerializerMethodField`): those are findings on the new code whatever the base branch does, with the existing cases named as follow-ups.
 2. Write the output file in the shape of section 4 of the templates file: the Result line first; numbered findings, each with the severity, a category (`reuse`, `layering`, `cleanup`, `naming`, `scalability`, `frontend`), the `file:line`, the problem, the fix as an instruction, and the section of the guide. One finding that occurs in several places is one finding with the other locations listed. Then the questions. Then up to five lines of what you checked and found correct.
 3. Return the Result line. When the review is written, stop. Do not correct anything.
 

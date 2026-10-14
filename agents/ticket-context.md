@@ -34,7 +34,7 @@ You write the brief. All the later steps use it. Work only in the current worktr
    - **Facts from related tickets**: each fact with its ticket ID.
    - **From attachments**: what each screenshot or file shows that the text does not show (file name → finding).
    - **Decisions**: each question that the evidence answered, with the answer and the evidence.
-   - **Still open**: the questions that have no answer. Mark each question `blocking` or `assume` (give the assumption that you make). A question is `blocking` only if the evidence supports two different results for the user and you cannot recommend one. Each question names the screen, the file or the behavior, so that a person can answer it from the work item alone.
+   - **Still open**: the questions that have no answer. Mark each question `blocking` or `assume` (give the assumption that you make). A question is `blocking` if the evidence supports two different results for the user and you cannot recommend one, or if the item, its parent or an attached design document assigns it to a named person ("Dev lead to set", "Owner: Beth", "Ask Waqar"): that question is never `assume`, whatever default exists, and the brief names the person. Each question names the screen, the file or the behavior, so that a person can answer it from the work item alone.
    - **Grouping** (only for more than one item): the items that can go together on one branch (same area, no conflicting changes), and the items to defer. Give a reason of one line for each. Never defer the first item.
 7. Return the path, one line for each `blocking` question, and the items to defer.
 

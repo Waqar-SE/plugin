@@ -82,7 +82,10 @@ Celery tasks live **only** in `workers/<area>.py`; task-side helpers in `workers
 - Logic shared by a worker and a webhook lives once in a service both call.
 - Selectors: module functions, same rules as services.
 - Dependency direction is integration → domain; the domain knows an integration only by reverse
-  names (`Device.seam_link`).
+  names (`Device.seam_link`). A domain app (`properties`, `accounts`, `billing`) never imports an
+  integration's models, services or selectors; `workers/` and `integrations/*` import the domain.
+  Existing imports the other way are debt, not precedent: a new one is a finding even where the
+  app already has some.
 
 ## 3. Models
 
@@ -97,6 +100,19 @@ Celery tasks live **only** in `workers/<area>.py`; task-side helpers in `workers
 - `save(update_fields=[...])` and `queryset.update(...)` include `updated_at`.
 - `QuerySet` subclass + `.as_manager()` when every reader/writer must narrow the same way.
 - Provider ids live on an integration-owned link model (`SeamDeviceLink`, `RUProperty`).
+
+### App ownership
+
+- An integration app holds only provider-specific data: external ids, raw provider statuses,
+  sync bookkeeping, credentials. A fact the host cares about independent of the provider (which
+  channels a property is listed on, whether each is on or off, who changed it and when, the audit
+  of that change) lives on a domain model, written by the integration through a service.
+- Test: if the provider were replaced tomorrow, would the field have to be migrated back into the
+  domain app? Then it is in the wrong app.
+- Design the domain model against this rule. A reference branch given for its API code lends its
+  request and parse code only, never its model shape.
+- A field, table or app placement that a work item or a design document leaves to a named person
+  ("Dev lead to set", "Owner: Beth") is not the planner's to decide: it is a `blocking` question.
 
 ### Choices
 
@@ -194,6 +210,10 @@ Celery tasks live **only** in `workers/<area>.py`; task-side helpers in `workers
   ```
 - Lock the parent row to serialize "first one wins" across children. Check-then-create against a
   unique constraint catches `IntegrityError` → attach or 409, never 500.
+- A pending or in-flight flag (`pending_request`, `status="pending"`) is a read-check-write: two
+  users who flip the same switch in the same second both pass the check and create two requests.
+  Lock the affected rows and re-check inside `atomic()`, or make the flag a partial unique
+  constraint (`condition=Q(status="pending")`).
 - Side effects that must not survive rollback go in `transaction.on_commit`
   (`enqueue_if_not_pending` already defers itself).
 - Commit local state only after the provider accepted the change.
@@ -223,8 +243,13 @@ Celery tasks live **only** in `workers/<area>.py`; task-side helpers in `workers
   ```
   Pass the actor that caused the change (`Actors.RENTALS_UNITED` for inbound RU) so it isn't echoed
   back. Never call a task from a view.
-- Beat entries in `CELERY_BEAT_SCHEDULE` with a comment justifying frequency; batch loops wrap each
-  item in `try/except` + `logger.exception`.
+- `register_event` / `dispatch_events` run inside the service, after its guards and writes, never
+  in `perform_create` / `perform_destroy` beside the service call: a refused request (400) must
+  leave no `Event` row behind.
+- Beat entries in `CELERY_BEAT_SCHEDULE` with a comment justifying frequency. Every task loop over
+  accounts, owners, properties or rows, including one-off release tasks and management commands,
+  wraps each item in `try/except` + `logger.exception`: one item's provider error must not stop
+  the rest.
 
 ## 8. Signals
 
@@ -261,6 +286,10 @@ Celery tasks live **only** in `workers/<area>.py`; task-side helpers in `workers
 
 - No queries in loops: `select_related` / `prefetch_related` (named `Prefetch`) in `get_queryset`
   or the selector; serializer methods read only prefetched data.
+- A scheduled task loads the rows it needs once per run (per account, per channel) and decides in
+  memory. Multiply any per-item query by the item count, the account count and the schedule
+  frequency before accepting it: four queries per property per channel every 10 minutes is a
+  finding.
 - Counts/sums via `annotate` / `aggregate` (`Count(..., filter=Q(...), distinct=True)`).
 - Bulk writes via `bulk_create` / `bulk_update(batch_size=...)` / `queryset.update` — they skip
   `save()` and signals, so guards go on the QuerySet. `.iterator()` for large reads. Let
@@ -339,7 +368,11 @@ Celery tasks live **only** in `workers/<area>.py`; task-side helpers in `workers
 - A function does one thing; extract a named helper when a block needs a comment to say what it
   does. Long modules become a package (`services/`) or are sectioned with banners.
 - Delete dead code completely — every reference in models, serializers, selectors, adapters,
-  frontend and migrations. No commented-out code; no `TODO` without a tracked work item.
+  frontend and migrations, and every comment, docstring, `FIXME` or `CLAUDE.md` line that
+  describes the removed thing. No commented-out code; no `TODO` without a tracked work item.
+- Before deleting a domain field because an integration stopped writing it, ask whether the
+  integration should still write it (§3 App ownership). A field in the right place with the wrong
+  writer gets a new writer, not a deletion.
 - Docstrings: first line says what, then *why*. Comments explain invariants and provider quirks.
   Type hints required on pydantic fields and dataclasses; otherwise follow the module.
 - Invariants an agent can't see in code go in `<app>/CLAUDE.md`. A convention the code departs from
@@ -544,8 +577,16 @@ tasks in `workers/<name>.py`, a mock mixin in `tests/`, a `CLAUDE.md` for its in
 - [ ] Root cause fixed in the shared path (no widened permission, no swallowed exception).
 - [ ] All sibling paths covered: create/update/delete, every screen using the endpoint, plurality.
 - [ ] Viewset makes one service call; no business rules in serializers, views or admin actions.
-- [ ] Side effects via `EventRouter` / `enqueue_if_not_pending` / `on_commit` from the service.
-- [ ] Tasks in `workers/`, accept `**kwargs`, return nothing, guard loop items.
+- [ ] Side effects via `EventRouter` / `enqueue_if_not_pending` / `on_commit` from the service,
+      after its guards; a 400 leaves no `Event` row.
+- [ ] Tasks in `workers/`, accept `**kwargs`, return nothing, guard every loop item (release
+      tasks and commands too).
+- [ ] Scheduled tasks load once per run; per-item queries multiplied by items × accounts ×
+      frequency.
+- [ ] No `SerializerMethodField` for a plain attribute path:
+      `ReadOnlyField(source="pending_request.action", allow_null=True)`.
+- [ ] Pending / in-flight flags written under `select_for_update` with a re-check, or a partial
+      unique constraint.
 - [ ] Querysets company-scoped, `is_deleted=False`; cross-company ids 404.
 - [ ] Codename for every method/action; `permission_classes =` only where §4 allows; public
       endpoints throttled; no secrets returned.
@@ -559,6 +600,9 @@ tasks in `workers/<name>.py`, a mock mixin in `tests/`, a `CLAUDE.md` for its in
 - [ ] Response fields only added; `@extend_schema` on custom actions.
 - [ ] Provider data: every call/webhook in `Log`, mapped in adapters, written by one service; local
       state committed only after the provider accepted.
+- [ ] App ownership (§3): provider-specific data on the integration's link model, host-facing
+      facts on the domain model; no domain import of `integrations.*`; no domain field deleted
+      because a provider stopped writing it.
 - [ ] Webhooks: sole auth class, `Log` row first, 200 for unretryable failures, no inline calls.
 - [ ] No derived fields or dead code; removed things removed everywhere; existing code reused.
 - [ ] Admin: system fields `readonly_fields`, audit logs read-only, actions call services.

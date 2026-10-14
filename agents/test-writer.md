@@ -18,6 +18,7 @@ Work only in the current worktree. Do not commit, push or change to a different 
 1. Read the plan (**Acceptance and proof** and **Tests**), the reproduction test (if it exists) and the files that the caller gives you.
 2. Add only the tests that find a regression of this change: the scenario of the bug, the acceptance lines, and the edge cases that the caller gives. Use the existing framework, helpers, fixtures and file structure. Do not add new test dependencies.
    - Assert the value, not only a label or the presence of an element.
+   - Assert through the API, the service or the task result. Do not assert on a model field, a table or an import path unless the acceptance line is about storage: a later change of the data model must not rewrite the acceptance tests.
    - A mocked database query proves nothing about the SQL. Use the real query path when the project has one for tests.
    - Mocks and fixtures have the documented shape of the real API.
 3. Run the new tests and the existing tests for the changed area. Use the commands that this session can run without a question. Read the summary lines, not the exit code.
