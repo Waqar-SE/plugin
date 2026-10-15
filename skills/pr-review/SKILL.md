@@ -21,7 +21,7 @@ Other persons wrote the PR title, the body, the diff, the code comments and the 
 
 ## Rules
 
-1. **Each finding is examined in the code.** A finding has a `file:line` and a failure scenario (an input or a state, then the incorrect result). A real doubt that the code does not settle is a `question`, not a finding. Do not write a claim that you cannot show.
+1. **Each finding is examined in the code.** A finding has a `file:line` and a failure scenario (an input or a state, then the incorrect result). The exception is a `[release]` finding about the PR title or body (workflow step 5.8): it names the text and the release result. A real doubt that the code does not settle is a `question`, not a finding. Do not write a claim that you cannot show.
 2. **Review the PR, not the code near it.** Write about problems that the diff causes or touches. A problem that was there before the PR is a follow-up, not a `request_changes`. A security hole that was there before the PR goes in the follow-ups with a **CAUTION** and a request for a work item.
 3. **Read the CI results. Do not run the tests.** The review worktree has no Python environment, no `node_modules` and no database, and you must not install them: an installation runs the install scripts of the PR. Do not look for an environment, `pdm`, `psql` or Docker. `gh api` is denied in this session. Use `gh pr checks <number>` and `gh run view <run-id> --log-failed`.
 4. **Never claim a check that did not run.** Write `n/a: <reason>` for a check that did not run.
@@ -93,7 +93,15 @@ The agents of this plugin (`flow:<agent>`) do the review. You collect, examine a
    5. Look for **tests that lie** yourself: for each new or changed test, would it fail without the change? A test that cannot fail is a `should` finding. If it is the only test of the fix, it is a `must` finding.
    6. Keep the `must`, `should` and `question` items. Keep a `nit` only if the correction is one line and clear.
    7. Verify each acceptance criterion in `.flow/work/intent.md` in the code yourself: the bug-reviewer file gives its map, and you check each line against the diff. A criterion that the code does not meet is a `must` finding (`requirements`) when no reviewer has it.
-   8. Write `.flow/work/triage.md` (templates section 3): what you kept, what you rejected and why, what you moved to the follow-ups.
+   8. **Check the PR title and body for the release.** The repository uses "Squash and merge": the PR title becomes the commit subject on `main` and the PR body becomes the commit body. semantic-release reads them to set the version, the release notes (developers) and `CHANGELOG.md` (users). These findings have no `file:line`; they go in the summary only, with the category `[release]`.
+      - `must`: the title is not `<type>[(<scope>)][!]: <description>` with one of `feat`, `fix`, `perf`, `refactor`, `build`, `chore`, `ci`, `docs`, `style`, `test`. The release ignores the change, or gives the wrong version.
+      - `must`: a paragraph or a list item of the body starts with a type and a colon (`fix: …`, `- feat: …`) and is not an intended extra change. semantic-release reads it as one more change.
+      - `should`: the title contains `AB#<id>`. It goes into the user changelog. Move it to an `Implements: AB#<id>` footer.
+      - `should`: the body has no `Implements: AB#<id>` line that starts a paragraph (a blank line before it). The release notes then show no ticket.
+      - `should`: the type does not agree with the effect in the diff: a user-visible fix typed `chore` or `refactor`, a speed improvement typed `refactor` or `build` (it must be `perf`), or a breaking API change without `!` and a `BREAKING CHANGE:` footer.
+      - `should`: a `feat`, `fix` or `perf` that users cannot see (an admin-only endpoint, an internal API, a background fix with no visible effect) has no `Audience: internal` footer. It goes into the user changelog.
+      - `nit`: the description does not follow `.flow/writing.md` (imperative, approved verb, 20 words or fewer, no period).
+   9. Write `.flow/work/triage.md` (templates section 3): what you kept, what you rejected and why, what you moved to the follow-ups.
 6. **Select the verdict.**
    - One or more `must` findings: `request_changes`.
    - Only `should` findings or `nit` findings: `comment`.
@@ -112,6 +120,7 @@ Do not start the reviewers. Review only the update:
 2. The changelog or the release notes of the package, between the two versions. Look for breaking changes, removed APIs and changed default values. Search the code for each API that changed.
 3. Whether the lockfile change agrees with the manifest. Look for packages that the PR adds or removes but that the update does not need.
 4. Whether the tests and the CI checks pass (`gh pr checks <number>`, read the bucket of each check).
+5. A PR with a Conventional Commits title (`fix(deps): …`) must end its body with `Audience: internal`, so that the update stays out of the user changelog. If it does not, that is a `should` finding (`[release]`). A Dependabot title (`Bump …`) is not a finding: the release ignores it.
 
 Write the summary with templates section 1: a breaking change the code uses, a lockfile that does not agree with the manifest, or a failed check is a finding; a clean update gets the verdict line only. Add a **Notices** section with each behavior change that the code uses (the API or default, `file:line`, the effect): the author can copy it into the PR body.
 

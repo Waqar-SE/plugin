@@ -29,6 +29,11 @@ coding agent making the change. Reference implementations: `integrations/runited
   (`pre-commit install --hook-type pre-commit`).
 - Dependencies via pdm (`pyproject.toml` + committed `pdm.lock`). Add one only when nothing
   installed covers it; never hand-edit the lock.
+- Ruff options go in the sections Ruff currently documents (lint rules under `[tool.ruff.lint]`);
+  a lint run prints no configuration warnings.
+- `--keepdb` reuses a test database at its old migration state. After migrations are rewritten
+  or renumbered (errors like "column … does not exist" or "already exists"), point
+  `DATABASE_URL` at a fresh database name instead of chasing the error.
 
 ```bash
 python manage.py test <app_or_dotted_path> --keepdb
@@ -41,7 +46,7 @@ pre-commit run --all-files
 
 ```
 <app>/
-  models.py | models/   choices.py   exceptions.py   signals.py   admin.py   CLAUDE.md
+  models.py | models/   choices.py   exceptions.py   signals.py   admin.py   CLAUDE.md   validators.py
   selectors.py | selectors/       services.py | services/  (exported from services/__init__.py)
   api/{serializers,viewsets,urls,filters,permissions}.py   management/commands/   tests/
 integrations/<provider>/   # adds, see §21
@@ -86,6 +91,13 @@ Celery tasks live **only** in `workers/<area>.py`; task-side helpers in `workers
   integration's models, services or selectors; `workers/` and `integrations/*` import the domain.
   Existing imports the other way are debt, not precedent: a new one is a finding even where the
   app already has some.
+- Each separately served surface of an app (admin API, public pages) gets its own
+  sub-package like `api/` (`<app>/<surface>/urls.py`, `views.py`), never `<surface>_urls.py` /
+  `<surface>_views.py` at the app root.
+- Code several surfaces use stays out of any one surface's package, and dependencies point from
+  the narrower surface to the shared code, never back.
+- Don't move routes to a new file that the parent `urls.py` must still `include()`; collapse a
+  repeated prefix in place with `path("prefix/", include([...]))`.
 
 ## 3. Models
 
@@ -100,6 +112,9 @@ Celery tasks live **only** in `workers/<area>.py`; task-side helpers in `workers
 - `save(update_fields=[...])` and `queryset.update(...)` include `updated_at`.
 - `QuerySet` subclass + `.as_manager()` when every reader/writer must narrow the same way.
 - Provider ids live on an integration-owned link model (`SeamDeviceLink`, `RUProperty`).
+- Reusable field validators live in `<app>/validators.py` (`accounts/validators.py`), never in
+  `models.py`; models, serializers and services import them from there. Moving a `RegexValidator`
+  changes no migration; confirm with `makemigrations --check`.
 
 ### App ownership
 
@@ -175,6 +190,16 @@ Celery tasks live **only** in `workers/<area>.py`; task-side helpers in `workers
   `SerializerMethodField` only for fallbacks or computations over prefetched rows. Field rules in
   `validate_<field>`, cross-field in `validate()` reading `attrs`. Inbound provider serializers keep
   provider field names (`ReservationID`).
+- The field's own checks (required, blank, `max_length`, format) run **before**
+  `validate_<field>`, so a message for them written there never shows. Put it on the field:
+  `error_messages={"blank": ..., "max_length": ...}`, declared or via `Meta.extra_kwargs`.
+  `validate_<field>` is for rules the field can't express (per-company uniqueness, digit counts).
+- `CharField`, `EmailField` and `SlugField` trim whitespace by default: no `validate_<field>`
+  that only returns `value.strip()`, and no `.strip()` inside one that checks something.
+- `ModelSerializer` copies `max_length`, `allow_blank` and `allow_null` from the model; don't
+  restate them in `extra_kwargs`. A field the model allows blank (the save fills a default) but
+  the API requires gets `{"allow_blank": False, "error_messages": {"blank": ...}}`, not an
+  `if not value` check.
 - Status codes: 200/201/204 success; 400 invalid input; 402 subscription (`HasValidSubscription`);
   403 permission; 404 missing or cross-company; 409 state conflict / stale save; 502 provider.
 - Response fields are a contract with web and mobile clients: add freely; rename or remove only
@@ -220,6 +245,8 @@ Celery tasks live **only** in `workers/<area>.py`; task-side helpers in `workers
 - Cache (Redis) holds short-lived, rebuildable values only. A lock with no row to lock is
   `cache.add(key, True, timeout=...)` released in `finally` (`directbooking/services/review.py`).
   Per-request memoization is `cached_property` on a selector class.
+- A cached page or lookup is keyed so a save invalidates it: include the row's `updated_at`
+  (`<area>:{id}:{updated_at}:...`), or delete the key in the service that writes the row.
 
 ## 7. Celery and events
 
@@ -281,6 +308,29 @@ Celery tasks live **only** in `workers/<area>.py`; task-side helpers in `workers
   `constant_time_compare`.
 - No PII (guest emails, phones, card data, tokens) in log messages — log ids.
 - HTML via `format_html` / templates; `html.escape` user values in generated email bodies.
+- A secret in a URL (token, signed link) leaks through `Referer` to every third party the page
+  loads. Those responses set a stricter `Referrer-Policy` (`strict-origin-when-cross-origin`),
+  assigned directly (`response["Referrer-Policy"] = ...`; `SecurityMiddleware` only uses
+  `setdefault`).
+- A security setting one surface needs differently is overridden on that surface's responses,
+  never changed globally: other flows depend on the global value (`SECURE_REFERRER_POLICY` is set
+  for Google OAuth).
+- The client IP comes only from DRF's throttle `get_ident()` (or a helper built on it), never
+  `X-Forwarded-For` or `REMOTE_ADDR`. `DRF_NUM_PROXIES` equals the number of proxies that append to
+  `X-Forwarded-For` in that environment: too low and every visitor shares one throttle bucket, too
+  high and the client can spoof its IP. A change to the proxy chain changes this setting.
+- Public content customers write (text, images, links) shares the reputation of the domain it is
+  served from; a scam on it can get that domain blocklisted. Serving it under `simplihost.com` is
+  a decision to raise, not a default. Never put `simplihost.com` on the Public Suffix List.
+- Never add a wildcard to `ALLOWED_HOSTS`: every made-up name would reach the whole app. Extra
+  hosts are validated in middleware, which limits them to their own routes (`request.urlconf`).
+- Middleware that rewrites the host rewrites `HTTP_X_FORWARDED_HOST` too (Django reads it under
+  `USE_X_FORWARDED_HOST`) and a same-origin `Origin` (the CSRF check compares it with the host).
+  Afterwards `get_host()` / `build_absolute_uri()` return the rewritten host, so public URLs are
+  built from the original one.
+- Links that grant access without a login are `django.core.signing` tokens with their own salt,
+  bound to the object and expiring. Their pages are `noindex` and stay out of shared caches, and
+  every action the link must not allow is refused on the server, not only hidden in the UI.
 
 ## 11. Query performance
 
@@ -365,6 +415,8 @@ Celery tasks live **only** in `workers/<area>.py`; task-side helpers in `workers
   `<Noun>Adapter`; serializers `*List`, `*Detail`,
   `*Write`, `*Ref`; provider models prefixed (`RUOwner`). Name by intent. Private helpers `_`.
 - Function-level imports only to break cycles, with a comment.
+- Module constants sit right after the imports, before the first function or class. Ruff can't
+  flag a constant further down (E402 covers imports only), so review does.
 - A function does one thing; extract a named helper when a block needs a comment to say what it
   does. Long modules become a package (`services/`) or are sectioned with banners.
 - Delete dead code completely — every reference in models, serializers, selectors, adapters,
@@ -412,6 +464,8 @@ Celery tasks live **only** in `workers/<area>.py`; task-side helpers in `workers
 - `self.client.force_login(user)`. Mock external SDKs at the boundary; never hit a provider.
 - Test services and adapters directly; test views for serialization, flow and permissions (403 per
   access level, 404 cross-company). A bug fix ships a test that fails without it.
+- A validation test asserts the exact message, not only the 400; a message that never shows
+  (§5) passes a status-only test.
 - Names are behaviour sentences (`test_unmapped_property_returns_200_without_reservation_dispatch`);
   date-sensitive tests use property-timezone dates.
 
@@ -563,7 +617,12 @@ tasks in `workers/<name>.py`, a mock mixin in `tests/`, a `CLAUDE.md` for its in
 ## 24. Footguns
 
 - `get_or_create` returns `(obj, created)`; use `update_or_create` when the row may exist with
-  changed data.
+  changed data. It already checks for the row: no `exists()` in front of it, and branches that
+  differ only in defaults pass the difference in (`defaults={"<field>": not created}`).
+- A message in `validate_<field>` for a check the field already makes (blank, `max_length`) never
+  shows; DRF's default message wins.
+- `DRF_NUM_PROXIES` defaults to 1. With two appending proxies (load balancer + nginx) every
+  visitor resolves to the load balancer: one throttle bucket for the whole platform.
 - `Availability` rows can be both `booked` and `blocked`; filter on the flag you mean.
 - `update()` / `bulk_update` skip `save()` and signals and don't touch `updated_at` (`auto_now`);
   include it yourself.
@@ -597,6 +656,17 @@ tasks in `workers/<name>.py`, a mock mixin in `tests/`, a `CLAUDE.md` for its in
 - [ ] Money in `Decimal`, quantized, cents only at the client; Stripe calls carry `stripe_account`
       and an idempotency key.
 - [ ] No secrets or PII in code, logs or errors; raw SQL parameterized.
+- [ ] Secrets in URLs carry their own `Referrer-Policy`; security settings overridden per
+      surface, not globally; client IP via the throttle's `get_ident()` with `DRF_NUM_PROXIES`
+      matching each environment's proxy chain.
+- [ ] No wildcard `ALLOWED_HOSTS`; a host rewrite covers `X-Forwarded-Host` and `Origin`; public
+      URLs from the original host. Login-free links signed, expiring, `noindex`, uncached, with
+      forbidden actions refused on the server. Customer-written public content on
+      `simplihost.com` raised as a decision.
+- [ ] Field-level messages in `error_messages`; no strip-only `validate_<field>`; no model limits
+      restated in `extra_kwargs`; tests assert the message.
+- [ ] Validators in `<app>/validators.py`; constants under the imports; each served surface a
+      sub-package; no `exists()` before `get_or_create`.
 - [ ] Response fields only added; `@extend_schema` on custom actions.
 - [ ] Provider data: every call/webhook in `Log`, mapped in adapters, written by one service; local
       state committed only after the provider accepted.

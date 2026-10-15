@@ -132,6 +132,8 @@ Result: <n> must, <n> should, <n> nit, <n> questions.
 
 `result.json`, `pr.body`. Markdown. `pr-writer` writes it from the working notes. Flow adds `AB#<id>` when it is missing.
 
+The repository uses "Squash and merge": this body becomes the commit body on `main`, and semantic-release reads it. The footers at the end must each start a paragraph (a blank line before them). `Implements:` gives the tickets to the developer release notes. `Audience: internal` (only for a `feat`, `fix` or `perf` that users cannot see) keeps the change out of the user changelog. Do not start a paragraph or a list item with a type and a colon (`fix: …`): semantic-release reads it as one more change.
+
 ```markdown
 ## Problem
 <What the user saw. Descriptive, simple present.>
@@ -147,7 +149,7 @@ Result: <n> must, <n> should, <n> nit, <n> questions.
 |---|---|---|
 | <the line from the work item> | `<test file>::<test name>` | passes; fails on the base branch |
 | inferred: <criterion> (<evidence>) | `<test file>::<test name>` | passes; fails on the base branch |
-| <a visual change> | Test procedure, step <n> | not verified in this session |
+| <a visual change> | Test procedure, step <n> | not verified |
 
 ## Test procedure
 <Only when a criterion has no automated proof. Preliminary requirements first. Then numbered steps with one action each. Then the expected result.>
@@ -161,11 +163,6 @@ Result: <n> must, <n> should, <n> nit, <n> questions.
 ## Decisions
 - <Question> -> <choice>. <Reason and evidence>. (one line for each `assume` item and each inferred criterion)
 
-## Review
-- Reviewers: bug, simplicity[, security]. Rounds: <n>. Must findings corrected: <n>.
-- Rejected findings: <finding> -> <reason>.
-- Guide drift: <guide and section> says <x>; the code does <y>; the code is right because <reason>. | none
-
 ## Follow-ups (not in this PR)
 - `path:line`: <a problem found outside the scope, one line>.
 
@@ -173,7 +170,8 @@ Result: <n> must, <n> should, <n> nit, <n> questions.
 **CAUTION:** <a migration that cannot be reversed | a data change | a breaking change>, and what to do before the release.
 **NOTE:** <information that the reviewer or the release needs>.
 
-AB#<id>
+Implements: AB#<id>, AB#<id>
+Audience: internal   <- only when users cannot see the change
 ```
 
 ## 6. Result summary
@@ -224,7 +222,11 @@ Method: <direct version change | parent update | override>. `<manifest>` changes
 - Build: `<command>`: <ok> | n/a: <reason>.
 
 **NOTE:** <a requirement of the new version, for example a Python version>.
+
+Audience: internal
 ```
+
+`Audience: internal` stays: a dependency change is not a user-facing change, and the footer keeps it out of the user changelog. The release notes still show it.
 
 ## 9. Retro notes
 
